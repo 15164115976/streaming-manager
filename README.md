@@ -1,2 +1,2 @@
 # streaming-manager
-直播间订阅
+直播间订阅0602
