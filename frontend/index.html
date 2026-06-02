@@ -479,8 +479,6 @@
     <div class="header">
       <h1>🎬 直播间管理器</h1>
       <div class="header-actions">
-        <button class="btn btn-primary" onclick="showAuthModal()">🔑 平台授权</button>
-        <button class="btn btn-primary" onclick="fetchDouyinFollowing()">📱 抖音关注</button>
         <button class="btn btn-primary" onclick="checkAllLive()">🔄 刷新状态</button>
         <button class="btn btn-success" onclick="showAddModal()">➕ 添加直播间</button>
       </div>
@@ -822,6 +820,12 @@
           body: JSON.stringify({ url })
         });
         const info = await response.json();
+        
+        if (info.error) {
+          alert('解析失败: ' + info.error);
+          return;
+        }
+        
         if (info) {
           document.getElementById('modalTitle').textContent = '添加直播间';
           document.getElementById('formId').value = '';

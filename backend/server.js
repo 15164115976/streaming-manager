@@ -71,9 +71,16 @@ app.post('/api/streamers/:id/play', async (req, res) => {
       return res.status(404).json({ error: '直播间不存在' });
     }
     
-    const streamInfo = await streamParser.getStreamUrl(streamer.url);
+    const auth = await db.get('SELECT * FROM platformAuth WHERE platform=?', [streamer.platform]);
+    const cookie = auth?.cookie || '';
+    
+    const streamInfo = await getStreamUrlWithYtDlp(streamer.url, streamer.liveTitle, cookie);
     if (!streamInfo) {
-      return res.status(400).json({ error: '无法获取直播流' });
+      return res.status(400).json({ error: '无法获取直播流，请检查直播间是否开播' });
+    }
+    
+    if (streamInfo.notLive) {
+      return res.status(400).json({ error: '主播未开播' });
     }
     
     const result = await potPlayer.playStream(streamInfo);
@@ -82,6 +89,61 @@ app.post('/api/streamers/:id/play', async (req, res) => {
     res.status(500).json({ error: error.message });
   }
 });
+
+app.get('/api/get-stream-url', async (req, res) => {
+  try {
+    const { url } = req.query;
+    if (!url) {
+      return res.status(400).json({ error: '缺少 URL 参数' });
+    }
+    
+    const streamInfo = await getStreamUrlWithYtDlp(url);
+    if (streamInfo) {
+      res.json(streamInfo);
+    } else {
+      res.status(400).json({ error: '无法获取直播流地址' });
+    }
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+async function getStreamUrlWithYtDlp(url, title = '', cookie = '') {
+  const { exec } = await import('child_process');
+  
+  return new Promise((resolve) => {
+    const ytDlpPath = 'C:\\Users\\admin\\AppData\\Local\\Microsoft\\WinGet\\Packages\\yt-dlp.yt-dlp_Microsoft.Winget.Source_8wekyb3d8bbwe\\yt-dlp.exe';
+    
+    let command = `"${ytDlpPath}" --get-url --no-warnings -f "best[ext=flv]/best[ext=m3u8]/best" "${url}"`;
+    if (cookie) {
+      command = `"${ytDlpPath}" --get-url --no-warnings -f "best[ext=flv]/best[ext=m3u8]/best" --cookies-from-browser chrome "${url}"`;
+    }
+    
+    exec(command, (error, stdout, stderr) => {
+      if (error) {
+        if (stderr && stderr.includes('Streamer is not live')) {
+          console.log('主播未开播:', url);
+          resolve({ notLive: true, message: '主播未开播' });
+        } else {
+          console.error('yt-dlp 执行失败:', error.message, stderr);
+          resolve(null);
+        }
+        return;
+      }
+      
+      const streamUrl = stdout.trim();
+      if (streamUrl) {
+        resolve({
+          url: streamUrl,
+          title: title || '直播'
+        });
+      } else {
+        console.error('未获取到流地址:', stderr);
+        resolve(null);
+      }
+    });
+  });
+}
 
 app.get('/api/streamers/:id/check', async (req, res) => {
   try {
@@ -107,6 +169,9 @@ app.post('/api/parse-url', async (req, res) => {
   try {
     const { url } = req.body;
     const info = await streamParser.parse(url);
+    if (!info) {
+      return res.status(400).json({ error: '无法解析直播间链接，请检查链接是否正确' });
+    }
     res.json(info);
   } catch (error) {
     res.status(500).json({ error: error.message });

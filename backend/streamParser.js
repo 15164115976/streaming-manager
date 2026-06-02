@@ -203,19 +203,22 @@ export class StreamParser {
         throw new Error('无法提取直播间ID');
       }
       
-      const apiUrl = `https://www.huya.com/cache.php?m=Live&do=getLiveInfoByRoom&roomId=${roomId}`;
-      const response = await axios.get(apiUrl);
-      const data = response.data.data;
+      const response = await axios.get(`https://www.huya.com/${roomId}`);
+      const $ = load(response.data);
+      
+      const name = $('.host-name').text().trim() || $('.room-info-hostname').text().trim() || roomId;
+      const title = $('.room-title').text().trim() || $('.live-title').text().trim();
+      const isLive = $('i.live-icon').length > 0 || $('span.live').length > 0;
       
       return {
         platform: 'huya',
         roomId: roomId,
-        name: data.hostName,
+        name: name,
         url: `https://www.huya.com/${roomId}`,
-        isLive: data.isLive === 1,
-        liveTitle: data.roomName,
-        viewerCount: data.totalCount,
-        cover: data.screenshot
+        isLive: isLive,
+        liveTitle: title,
+        viewerCount: 0,
+        cover: ''
       };
     } catch (error) {
       console.error('虎牙解析失败:', error);
